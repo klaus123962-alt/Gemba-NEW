@@ -580,13 +580,17 @@ video{
             </select>
         </div>
         <div>
-            <label>Маршрут обхода</label>
+      <label>Маршрут обхода</label>
             <select id="route">
-                <option>Маршрут 1 — Складской комплекс первой территории</option>
-                <option>Маршрут 2 — ЦПТ( Сектора с 10 по 15)</option>
-                <option>Маршрут 3 — АБК, ИЛ, ОТК, ТС, СГЭ - первой площадки</option>
-                <option>Маршрут 4 — Складской комплекс второй территории</option>
-                <option>Маршрут 5 — УПАТ,УПИТ,УПНИ</option>
+                <option>Участок гладкой трубы</option>
+                <option>Участок СВ</option>
+                <option>Участок НСИ</option>
+                <option>Складской комплекс</option>
+                <option>Транспортный цех</option>
+      <option>Участок переработки полимеров</option>
+      <option>ОТК и ИЛ</option>
+      <option>РМЦ</option>
+ <option>Котельная</option>
             </select>
         </div>
     </div>
@@ -685,7 +689,22 @@ let remarkCount = 0;
 const recognitions = new Map();
 const voiceStates = new Map();
 const flashStates = new Map();
-let cameraActive = false; // Флаг для отслеживания активности камеры
+let cameraActive = false;
+
+// Направления обхода
+const DIRECTIONS = [
+    'ОТ и ТБ',
+    'Инфраструктура',
+    'Санитарное состояние',
+    'Электробезопасность',
+    'Оборудование',
+    '5S',
+    'Инфостенды',
+    'Хранение ГП',
+    'Хранение отходов',
+    'Хранение сырья',
+    'ИСМ'
+];
 
 // Класс для работы с IndexedDB
 class OfflineStorage {
@@ -884,7 +903,6 @@ class OfflineStorage {
         });
     }
 
-    // Метод для очистки всей истории
     async clearAllProtocols() {
         return new Promise((resolve, reject) => {
             const tx = this.db.transaction(['protocols', 'photos'], 'readwrite');
@@ -1014,11 +1032,15 @@ class AutoSaveManager {
                 location = locationSelect.value || '';
             }
             
+            const directionSelect = document.getElementById(`direction-${remarkId}`);
+            const direction = directionSelect?.value || '';
+            
             const remarkData = {
                 index: index,
                 description: description,
                 responsible: responsible,
                 location: location,
+                direction: direction,
                 photoData: remark.getAttribute('data-photo-base64'),
                 photoBlob: remark.getAttribute('data-photo-blob')
             };
@@ -1136,6 +1158,7 @@ function closeRemark(button){
     }
 }
 
+// ========== ИСПРАВЛЕННАЯ ФУНКЦИЯ updateLocationSelect ==========
 function updateLocationSelect(remarkId) {
     const routeSelect = document.getElementById('route');
     const locationSelect = document.getElementById(`location-${remarkId}`);
@@ -1146,6 +1169,7 @@ function updateLocationSelect(remarkId) {
     const selectedRoute = routeSelect.value;
     let options = [];
     
+    // Специализированные списки для известных маршрутов
     if (selectedRoute.includes("Маршрут 1 — Складской комплекс первой территории")) {
         options = ['Сектор 1', 'Сектор 2', 'Сектор 3', 'Сектор 4', 'Сектор 5', 'Сектор 6', 'Сектор 7', 'Сектор 8'];
     } else if (selectedRoute.includes("Маршрут 2 — ЦПТ( Сектора с 10 по 15)")) {
@@ -1156,10 +1180,14 @@ function updateLocationSelect(remarkId) {
         options = ['Сектор 1', 'Сектор 2', 'Сектор 3', 'Сектор 4', 'Сектор 5', 'Сектор 6', 'Сектор 7', 'Сектор 8', 'Сектор 9'];
     } else if (selectedRoute.includes("Маршрут 5 — УПАТ,УПИТ,УПНИ")) {
         options = ['УПАТ', 'УПИТ', 'УПНИ'];
+    } else {
+        // 🔧 ДЕФОЛТНЫЙ СПИСОК для всех остальных маршрутов
+        options = ['Территория возле КПП', 'Склад ТМЦ'];
     }
     
     const currentValue = locationSelect.value;
     
+    // Перестраиваем select
     locationSelect.innerHTML = '';
     
     options.forEach(option => {
@@ -1169,21 +1197,34 @@ function updateLocationSelect(remarkId) {
         locationSelect.appendChild(opt);
     });
     
+    // Добавляем пункт "Ввести вручную"
     const customOpt = document.createElement('option');
     customOpt.value = 'custom';
     customOpt.textContent = 'Ввести вручную';
     locationSelect.appendChild(customOpt);
     
+    // Восстанавливаем выбранное значение, если оно было и подходит
     if (currentValue && options.includes(currentValue)) {
         locationSelect.value = currentValue;
+    } else if (currentValue === 'custom') {
+        locationSelect.value = 'custom';
+        customLocationInput.style.display = 'block';
+    } else {
+        // По умолчанию выбираем первый пункт из списка
+        if (options.length > 0) {
+            locationSelect.value = options[0];
+            customLocationInput.style.display = 'none';
+        }
     }
     
+    // Дополнительная проверка на случай, если выбран custom
     if (locationSelect.value === 'custom') {
         customLocationInput.style.display = 'block';
     } else {
         customLocationInput.style.display = 'none';
     }
 }
+// ========== КОНЕЦ ИСПРАВЛЕННОЙ ФУНКЦИИ ==========
 
 function toggleCustomLocation(select, remarkId) {
     const customInput = document.getElementById(`custom-location-${remarkId}`);
@@ -1322,22 +1363,42 @@ function addRemark(){
 
             <label>Ответственный</label>
             <select id="responsible-${remarkCount}" onchange="toggleCustomInput(this, '${remarkId}'); onFieldChange()">
-                <option>Новиков В.В.</option>
-                <option>Свинин Э.Е.</option>
-                <option>Тимофеев А.В.</option>
-                <option>Савранов А.В.</option>
-                <option>Эпов Д.В.</option>
-                <option>Мосин А.Н.</option>
-                <option>Трубачев Ю.А.</option>
+                <option>Лозовенко В.И.</option>
+                <option>Карасиков М.А.</option>
+                <option>Шевчук Е.Ю.</option>
+                <option>Гузенко С.П.</option>
+                <option>Батищев Ю.А.</option>
+                <option>Фомина Е.С.</option>
+                <option>Матва Е.С.</option>
+                <option>Абрамов С.Н.</option>
+                <option>Шевяков Е.Ю.</option>
+                <option>Мирцхулава Ю.А.</option>
+                <option>Лебедьков Н.П.</option>
+                <option>Нач.смены склада</option>
+                <option>Черняков А.А.</option>
+                <option>Ст.кладовщик Сырья и материалов</option>
+                <option>Бородина С.Д.</option>
+                <option>Швец С.Г.</option>
+                <option>Начальник смены УГТ</option>
+                <option>Кириенко Ю.Г.</option>
+                <option>Викол А,С.</option>
+                <option>Хадыкина Н.А.</option>
                 <option value="custom">Другие</option>
             </select>
             <input id="custom-responsible-${remarkId}" placeholder="Ввести вручную" style="display:none; margin-top:5px;" onchange="onFieldChange()">
 
             <label>Место обнаружения</label>
             <select id="location-${remarkId}" onchange="toggleCustomLocation(this, '${remarkId}'); onFieldChange()">
-                <!-- Опции будут заполнены автоматически -->
+                <option>Территория возле КПП</option>
+                <option>Склад ТМЦ</option>
+                <option value="custom">Другие</option>
             </select>
             <input id="custom-location-${remarkId}" placeholder="Ввести вручную" style="display:none; margin-top:5px;" onchange="onFieldChange()">
+
+            <label>Направление обхода</label>
+            <select id="direction-${remarkId}" onchange="onFieldChange()">
+                ${DIRECTIONS.map(dir => `<option>${dir}</option>`).join('')}
+            </select>
 
         </div>
     `;
@@ -1524,7 +1585,7 @@ function takePhoto(remarkNumber) {
     });
 }
 
-// РАСПОЗНАВАНИЕ РЕЧИ - микрофон включается ТОЛЬКО при нажатии кнопки
+// РАСПОЗНАВАНИЕ РЕЧИ
 function startVoiceInput(remarkId) {
     const statusDiv = document.getElementById(`status-${remarkId}`);
     const startBtn = document.getElementById(`start-btn-${remarkId}`);
@@ -1859,13 +1920,6 @@ function clearVoiceInput(remarkId){
 }
 
 // =================== ФУНКЦИИ ХЕШИРОВАНИЯ ===================
-/*
-💾 Сохранить в URL - сохраняет данные в адресную строку (хэш)
-Это позволяет поделиться ссылкой или восстановить данные при перезагрузке
-НО имеет ограничение по длине (примерно 2000 символов)
-Подходит только для небольших протоколов без фото
-*/
-
 function saveToHash() {
     try {
         const data = {
@@ -1900,6 +1954,9 @@ function saveToHash() {
                 location = locationSelect.value || '';
             }
             
+            const directionSelect = document.getElementById(`direction-${remarkId}`);
+            const direction = directionSelect?.value || '';
+            
             const hasPhoto = remark.hasAttribute('data-photo-base64');
             let photoData = null;
             if (hasPhoto) {
@@ -1911,8 +1968,9 @@ function saveToHash() {
                 description,
                 responsible,
                 location,
+                direction,
                 hasPhoto: !!photoData,
-                photoData: photoData ? photoData.substring(0, 100) : null // Обрезаем фото для URL
+                photoData: photoData ? photoData.substring(0, 100) : null
             });
         });
         
@@ -1999,6 +2057,11 @@ function loadFromHash() {
                                 customLocationInput.value = remarkData.location;
                             }
                         }, 100);
+                    }
+                    
+                    const directionSelect = document.getElementById(`direction-${remarkId}`);
+                    if (directionSelect && remarkData.direction) {
+                        directionSelect.value = remarkData.direction;
                     }
                 }
             });
@@ -2102,6 +2165,11 @@ function loadProtocolData(protocol) {
                             customLocationInput.value = remarkData.location;
                         }
                     }, 100);
+                }
+                
+                const directionSelect = document.getElementById(`direction-${remarkId}`);
+                if (directionSelect && remarkData.direction) {
+                    directionSelect.value = remarkData.direction;
                 }
                 
                 if (remarkData.photoData) {
@@ -2233,14 +2301,14 @@ async function exportExcelWithImages() {
         
         const worksheet = workbook.addWorksheet('Протокол');
         
-        worksheet.mergeCells('A1:G1');
+        worksheet.mergeCells('A1:H1');
         const titleRow = worksheet.getRow(1);
         titleRow.getCell(1).value = `Протокол обхода от ${date}`;
         titleRow.getCell(1).font = { size: 16, bold: true, color: { argb: 'FF001355' } };
         titleRow.getCell(1).alignment = { horizontal: 'center' };
         titleRow.height = 25;
         
-        worksheet.mergeCells('A2:G2');
+        worksheet.mergeCells('A2:H2');
         const protocolRow = worksheet.getRow(2);
         protocolRow.getCell(1).value = `В соответствии с приказом № 07 от 13.02.2025 г. комиссией (${group}), Маршрут: ${route}`;
         protocolRow.getCell(1).font = { size: 11 };
@@ -2253,7 +2321,7 @@ async function exportExcelWithImages() {
         worksheet.getRow(6).height = 10;
         worksheet.getRow(7).height = 10;
         
-        worksheet.getRow(8).values = ['№', 'Фото', 'Описание', 'Ответственный', 'Место обнаружения', 'Срок устранения', 'Статус'];
+        worksheet.getRow(8).values = ['№', 'Фото', 'Описание', 'Ответственный', 'Место обнаружения', 'Направление обхода', 'Срок устранения', 'Статус'];
         const headerRow = worksheet.getRow(8);
         headerRow.font = { bold: true };
         headerRow.fill = {
@@ -2270,6 +2338,7 @@ async function exportExcelWithImages() {
             { width: 50 },  // Описание
             { width: 25 },  // Ответственный
             { width: 25 },  // Место обнаружения
+            { width: 25 },  // Направление обхода
             { width: 20 },  // Срок устранения
             { width: 20 }   // Статус
         ];
@@ -2298,6 +2367,9 @@ async function exportExcelWithImages() {
                 location = locationSelect.value || "";
             }
             
+            const directionSelect = document.getElementById(`direction-${remarkId}`);
+            const direction = directionSelect?.value || "";
+            
             const hasPhoto = remark.hasAttribute('data-photo-blob');
             
             const row = worksheet.getRow(currentRow);
@@ -2305,10 +2377,11 @@ async function exportExcelWithImages() {
             row.getCell(3).value = desc;
             row.getCell(4).value = resp;
             row.getCell(5).value = location;
-            row.getCell(6).value = "";
-            row.getCell(7).value = "Не рассмотрено";
+            row.getCell(6).value = direction;
+            row.getCell(7).value = "";
+            row.getCell(8).value = "Не рассмотрено";
             
-            for (let col = 1; col <= 7; col++) {
+            for (let col = 1; col <= 8; col++) {
                 const cell = row.getCell(col);
                 if (col !== 3) {
                     cell.alignment = { 
@@ -2324,7 +2397,7 @@ async function exportExcelWithImages() {
                 }
             }
             
-            const statusCell = row.getCell(7);
+            const statusCell = row.getCell(8);
             
             statusCell.dataValidation = {
                 type: 'list',
@@ -2336,7 +2409,7 @@ async function exportExcelWithImages() {
                 error: 'Выберите значение из списка: Выполнено, В работе, Не рассмотрено, Отклонено'
             };
             
-            const statusColumnLetter = 'G';
+            const statusColumnLetter = 'H';
             
             worksheet.addConditionalFormatting({
                 ref: `${statusColumnLetter}${currentRow}`,
@@ -2473,7 +2546,7 @@ async function exportExcelWithImages() {
         
         for (let i = 8; i < currentRow; i++) {
             const row = worksheet.getRow(i);
-            for (let j = 1; j <= 7; j++) {
+            for (let j = 1; j <= 8; j++) {
                 const cell = row.getCell(j);
                 cell.border = {
                     top: { style: 'thin', color: { argb: 'FF001355' } },
@@ -2523,8 +2596,8 @@ async function exportExcelWithImages() {
     }
 }
 
-// =================== СОХРАНЕНИЕ В ОБЛАКО (n8n + Supabase Storage) ===================
-const CLOUD_WEBHOOK_URL = 'https://esz-polyplastic.cloudpub.ru/webhook/gemba';
+// =================== СОХРАНЕНИЕ В ОБЛАКО (n8n) ===================
+const CLOUD_WEBHOOK_URL = 'https://esz-polyplastic.cloudpub.ru/webhook/gemba-ozty';
 
 async function sendToCloud() {
     const cloudBtn = document.getElementById('cloudSaveBtn');
@@ -2569,6 +2642,9 @@ async function sendToCloud() {
                 location = locationSelect.value || '';
             }
 
+            const directionSelect = document.getElementById(`direction-${remarkId}`);
+            const direction = directionSelect?.value || '';
+
             let photoBase64 = null;
             if (remark.hasAttribute('data-photo-base64')) {
                 photoBase64 = remark.getAttribute('data-photo-base64');
@@ -2580,6 +2656,7 @@ async function sendToCloud() {
                 description: description,
                 responsible: responsible,
                 location: location,
+                direction: direction,
                 photo_base64: photoBase64
             });
         }
@@ -2599,9 +2676,9 @@ async function sendToCloud() {
 
         const result = await response.json();
         if (autoSaveManager) {
-            autoSaveManager.updateSaveStatus('✅ Протокол сохранён в облако (фото в Storage)', 'success');
+            autoSaveManager.updateSaveStatus('✅ Протокол сохранён в облако', 'success');
         }
-        alert('Протокол успешно отправлен! Фото загружены в Supabase Storage.');
+        alert('Протокол успешно отправлен!');
     } catch (error) {
         console.error('Ошибка отправки в облако:', error);
         if (autoSaveManager) {
